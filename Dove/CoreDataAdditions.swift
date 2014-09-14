@@ -12,11 +12,11 @@ import CoreData
 extension NSManagedObjectContext {
     
     private func _save() -> NSError? {
-
+        
         if !self.hasChanges {
             return nil
         }
-
+        
         var error: NSError? = nil
         if (!self.save(&error)) {
             #if DEBUG
@@ -26,27 +26,28 @@ extension NSManagedObjectContext {
             #endif
             return error
         }
-
+        
         return nil
     }
-
-    public func saveWithBlock(block: (Void)->(Void)) {
+    
+    public func saveWithBlock(block: (NSManagedObjectContext)->()) {
         self.performBlockAndWait({
-            block()
+            block(self)
             if let error = self._save() {
                 #if DEBUG
-#endif
+                #endif
             }
         })
     }
-
-    public func saveAsynchronouslyWithBlock(block: (Void)->(Void)){
-            self.performBlock({
-                block()
-                if let error = self._save() {
-                } else {
-                }
-            })
+    
+    public func saveAsynchronouslyWithBlock(block: (NSManagedObjectContext)->()){
+        self.performBlock({
+            block(self)
+            if let error = self._save() {
+                #if DEBUG
+                #endif
+            }
+        })
     }
     
 }
@@ -83,24 +84,30 @@ extension NSManagedObject {
         context.deleteObject(self)
     }
 
-    private class func fetchRequest(predicate: NSPredicate, context: NSManagedObjectContext) -> NSFetchRequest {
+    private class func fetchRequest(predicate: NSPredicate, sortDescriptors: [NSSortDescriptor]?, context: NSManagedObjectContext) -> NSFetchRequest {
         let request = NSFetchRequest()
         request.entity = NSEntityDescription.entityForName(self.entityName, inManagedObjectContext: context)
         request.predicate = predicate
+        request.sortDescriptors = sortDescriptors
         return request
     }
 
-    public class func find(predicate: NSPredicate, context: NSManagedObjectContext = CoreDataManager.sharedInstance.mainContext) -> [NSManagedObject] {
-        let request = self.fetchRequest(predicate, context: context)
+    public class func find(predicate: NSPredicate, sortDescriptors: [NSSortDescriptor]? = nil, context: NSManagedObjectContext = CoreDataManager.sharedInstance.mainContext) -> [NSManagedObject] {
+        let request = self.fetchRequest(predicate, sortDescriptors: sortDescriptors, context: context)
         if let objects = context.executeFetchRequest(request, error: nil) {
             return objects as [NSManagedObject]
         } else {
             return []
         }
     }
-
-    public class func findFirst(predicate: NSPredicate, context: NSManagedObjectContext = CoreDataManager.sharedInstance.mainContext) -> NSManagedObject? {
-        let request = self.fetchRequest(predicate, context: context)
+    
+    public class func findAll(sortDescriptors: [NSSortDescriptor]? = nil, context: NSManagedObjectContext = CoreDataManager.sharedInstance.mainContext) -> [NSManagedObject] {
+        let predicate = NSPredicate(value: true)
+        return self.find(predicate, sortDescriptors: sortDescriptors, context: context)
+    }
+    
+    public class func findFirst(predicate: NSPredicate, sortDescriptors: [NSSortDescriptor]? = nil, context: NSManagedObjectContext = CoreDataManager.sharedInstance.mainContext) -> NSManagedObject? {
+        let request = self.fetchRequest(predicate, sortDescriptors: sortDescriptors, context: context)
         request.fetchLimit = 1
         if let objects = context.executeFetchRequest(request, error: nil) {
             return objects.first as NSManagedObject?
@@ -108,23 +115,28 @@ extension NSManagedObject {
             return nil
         }
     }
-
+    
     public class func get(objectID: NSManagedObjectID, context: NSManagedObjectContext = CoreDataManager.sharedInstance.mainContext) -> NSManagedObject? {
         return context.existingObjectWithID(objectID, error: nil)
     }
 
     public class func count(predicate: NSPredicate, context: NSManagedObjectContext = CoreDataManager.sharedInstance.mainContext) -> Int {
-        let request = self.fetchRequest(predicate, context: context)
+        let request = self.fetchRequest(predicate, sortDescriptors: nil, context: context)
         let count = context.countForFetchRequest(request, error: nil)
         return count
+    }
+    
+    public class func countAll(context: NSManagedObjectContext = CoreDataManager.sharedInstance.mainContext) -> Int {
+        let predicate = NSPredicate(value: true)
+        return self.count(predicate, context: context)
     }
 
     public class func insert(context: NSManagedObjectContext = CoreDataManager.sharedInstance.mainContext) -> NSManagedObject {
         return NSEntityDescription.insertNewObjectForEntityForName(self.entityName, inManagedObjectContext: context) as NSManagedObject
     }
 
-    public class func findFirstOrInsert(predicate: NSPredicate, context: NSManagedObjectContext = CoreDataManager.sharedInstance.mainContext) -> NSManagedObject {
-        let request = self.fetchRequest(predicate, context: context)
+    public class func findFirstOrInsert(predicate: NSPredicate, sortDescriptors: [NSSortDescriptor]? = nil, context: NSManagedObjectContext = CoreDataManager.sharedInstance.mainContext) -> NSManagedObject {
+        let request = self.fetchRequest(predicate, sortDescriptors: sortDescriptors, context: context)
         request.fetchLimit = 1
         if let objects = context.executeFetchRequest(request, error: nil) {
             if let object = objects.first as? NSManagedObject {
@@ -143,7 +155,7 @@ extension NSManagedObject {
     }
 
     public class func delete(predicate: NSPredicate, context: NSManagedObjectContext = CoreDataManager.sharedInstance.mainContext) {
-        let request = self.fetchRequest(predicate, context: context)
+        let request = self.fetchRequest(predicate, sortDescriptors: nil, context: context)
         request.includesPropertyValues = false
 
         if let objects = context.executeFetchRequest(request, error: nil) {
